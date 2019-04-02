@@ -61,7 +61,7 @@ class EmmyAPI:
 				'Authorization': create_auth_string(self.username, self.password, self.URL_ENCODING_SHA1_PEPPER)
 			}
 
-			response = self._request('login', 'post', headers=headers, json=payload, login=True)
+			response = self._request('login', method='post', headers=headers, json=payload, login=True)
 			response_json = response.json()
 
 			self.auth = EmmyAuth(response_json.get('accessToken'))
@@ -75,7 +75,7 @@ class EmmyAPI:
 		:return: User information object
 		"""
 		endpoint = 'users/{}'.format(self.user_id)
-		response = self._request(endpoint, 'get')
+		response = self._request(endpoint, method='get')
 		return User(response.json())
 
 	# Cars
@@ -87,31 +87,56 @@ class EmmyAPI:
 			'lat': lat,
 			'lon': lon,
 		}
-		response = self._request(endpoint, 'get', params=params)
+		response = self._request(endpoint, method='get', params=params)
 		return [CarListItem(item) for item in response.json()]
 
 	def get_car_info(self, car_id) -> Car:
 		endpoint = 'cars/{}'.format(car_id)
-		response = self._request(endpoint, 'get')
+		response = self._request(endpoint, method='get')
+		return Car(response.json())
+
+	def unlock_car(self, car_id: int or str):
+		endpoint = 'users/{}/reservations/{}/car/unlock'.format(self.user_id, car_id)
+		response = self._request(endpoint, method='post')
+		return Car(response.json())
+
+	def lock_car(self, car_id: int or str):
+		endpoint = 'users/{}/reservations/{}/car/lock'.format(self.user_id, car_id)
+		response = self._request(endpoint, method='post')
 		return Car(response.json())
 
 	# Map
 	#####################################
 
-	def get_available_cars(self) -> List[CarListItem]:
+	def get_cars_in_area(self,
+	                     lat1: str or float,
+	                     lat2: str or float,
+	                     lon1: str or float,
+	                     lon2: str or float) -> List[CarListItem]:
 		endpoint = 'map/cars'
-		response = self._request(endpoint, 'get')
+		params = {
+			'lat1': lat1,
+			'lat2': lat2,
+			'lon1': lon1,
+			'lon2': lon2,
+		}
+		response = self._request(endpoint, method='get', params=params)
+		return [CarListItem(item) for item in response.json()]
+
+	def get_all_cars(self) -> List[CarListItem]:
+		endpoint = 'map/cars'
+		response = self._request(endpoint, method='get')
 		return [CarListItem(item) for item in response.json()]
 
 	def get_territories(self) -> List[Territory]:
 		endpoint = 'territories/business'
-		response = self._request(endpoint, 'get')
+		response = self._request(endpoint, method='get')
 		return [Territory(item) for item in response.json()]
 
 	# todo: find out what this does
 	def locations(self):
 		endpoint = 'locations'
-		response = self._request(endpoint, 'get')
+		response = self._request(endpoint, method='get')
 		return response.json()
 
 	# Reservations
@@ -122,18 +147,39 @@ class EmmyAPI:
 		data = {
 			'carId': car_id,
 		}
-		response = self._request(endpoint, 'post', json=data)
+		response = self._request(endpoint, method='post', json=data)
 		return Reservation(response.json())
 
 	def end_reservation(self, reservation_id: int or str) -> Reservation:
 		endpoint = 'users/{}/reservations/{}/end'.format(self.user_id, reservation_id)
-		response = self._request(endpoint, 'put',)
+		response = self._request(endpoint, method='put', )
 		return Reservation(response.json())
 
 	def get_reservation_info(self, reservation_id: int or str) -> Reservation:
 		endpoint = 'users/{}/reservations/{}'.format(self.user_id, reservation_id)
-		response = self._request(endpoint, 'get')
+		response = self._request(endpoint, method='get')
 		return Reservation(response.json())
+
+	# General
+	#####################################
+
+	def log(self, lat: str or float, lon: str or float, event_name: str) -> bool:
+		endpoint = 'log'
+		data = {
+			'data': {
+				'lat': lat,
+				'lon': lon,
+				'userId': self.user_id,
+			},
+			'eventName': event_name,
+		}
+		response = self._request(endpoint, method='post', json=data)
+		return response.json().get('success')
+
+	def notifications(self) -> List:
+		endpoint = 'notifications'
+		response = self._request(endpoint, method='get')
+		return response.json()
 
 	##########################
 	# Private Methods
@@ -160,7 +206,7 @@ class EmmyAPI:
 			url=self._api_url(endpoint),
 			params=local_params,
 			json=json,
-			auth=self.auth,)
+			auth=self.auth)
 		prepped = self.session.prepare_request(r)
 
 		response = self.session.send(prepped, verify=self.verify)
