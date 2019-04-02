@@ -1,6 +1,6 @@
 # Emmy-Api
 ## usage:
-```
+```python
 api = EmmyAPI(username='user', password='pass')
 api.login()
 
