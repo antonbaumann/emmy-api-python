@@ -14,14 +14,14 @@ from EmmyAPI.model.car import Car, CarListItem
 
 
 class EmmyAPI:
-	API_URL = 'https://emio-frontend.com/api/prod/v2.07'
+	API_URL = 'https://api.emmy.ninja'
 	URL_ENCODING_SHA1_PEPPER = [
 		'r8UY7jvUVukMsVNENfGZDUaWnzBQccGx',
 		'mHeWYBzWQ6dHshrmUJF7HKRMoRpwoMWj',
 		'JZWsFxFv9frtVgLYUwPahTVG4WGyYLZW',
 		'aVFGGdUx3Rt2rUYVyEDBFrvdKkFgaiMZ',
 	]
-	USER_AGENT = 'CarSharing/1.99.7 (iPhone; iOS 12.1.4; Scale/2.00)'
+	USER_AGENT = 'EmmyAPI Python 2.0 beta'
 
 	def __init__(self, username, password, proxies=None, verify=True):
 		self.username = username
@@ -56,12 +56,12 @@ class EmmyAPI:
 		"""
 
 		if not self._is_logged_in or force:
-			payload = {"grant_type": "client_credentials"}
-			headers = {
-				'Authorization': create_auth_string(self.username, self.password, self.URL_ENCODING_SHA1_PEPPER)
+			payload = {
+				"password": self.password,
+				"username": self.username,
 			}
-
-			response = self._request('login', method='post', headers=headers, json=payload, login=True)
+			endpoint = 'auth/login'
+			response = self._request(endpoint=endpoint, method='post', json=payload, login=True)
 			response_json = response.json()
 
 			self.auth = EmmyAuth(response_json.get('accessToken'))
@@ -211,6 +211,8 @@ class EmmyAPI:
 
 		response = self.session.send(prepped, verify=self.verify)
 		if response.status_code >= 400:
+			print(response.status_code)
+			print(response.url)
 			handle_error_response(response)
 
 		return response
@@ -222,6 +224,6 @@ class EmmyAPI:
 	def _api_url(self, endpoint=''):
 		if not endpoint.startswith('/'):
 			endpoint = '/' + endpoint
-		if not endpoint.endswith('/'):
-			endpoint += '/'
+		if endpoint.endswith('/'):
+			endpoint = endpoint[:len(endpoint)-1]
 		return self.API_URL + endpoint
