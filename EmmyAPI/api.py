@@ -6,7 +6,6 @@ from typing import List
 
 from EmmyAPI.model.reservation import Reservation
 from EmmyAPI.model.territory import Territory
-from EmmyAPI.util.hash import create_auth_string
 from EmmyAPI.auth import EmmyAuth
 from EmmyAPI.exeptions import handle_error_response, NotLoggedInException
 from EmmyAPI.model.user import User
@@ -15,12 +14,6 @@ from EmmyAPI.model.car import Car, CarListItem
 
 class EmmyAPI:
 	API_URL = 'https://api.emmy.ninja'
-	URL_ENCODING_SHA1_PEPPER = [
-		'r8UY7jvUVukMsVNENfGZDUaWnzBQccGx',
-		'mHeWYBzWQ6dHshrmUJF7HKRMoRpwoMWj',
-		'JZWsFxFv9frtVgLYUwPahTVG4WGyYLZW',
-		'aVFGGdUx3Rt2rUYVyEDBFrvdKkFgaiMZ',
-	]
 	USER_AGENT = 'EmmyAPI Python 2.0 beta'
 
 	def __init__(self, username, password, proxies=None, verify=True):
@@ -65,7 +58,7 @@ class EmmyAPI:
 			response_json = response.json()
 
 			self.auth = EmmyAuth(response_json.get('accessToken'))
-			self.user_id = response_json.get('userId')
+			self.user_id = response_json.get('id')
 
 	# Users
 	#####################################
@@ -78,14 +71,15 @@ class EmmyAPI:
 		response = self._request(endpoint, method='get')
 		return User(response.json())
 
-	# Cars
+	# Vehicles
 	#####################################
 
-	def list_cars(self, lat, lon) -> List[CarListItem]:
-		endpoint = 'cars'
+	def list_vehicles(self, lat, lon, limit=5) -> List[CarListItem]:
+		endpoint = 'vehicles/proximity'
 		params = {
 			'lat': lat,
 			'lon': lon,
+			'limit': limit,
 		}
 		response = self._request(endpoint, method='get', params=params)
 		return [CarListItem(item) for item in response.json()]
