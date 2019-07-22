@@ -9,7 +9,8 @@ class User:
 		return 'User: ' + json.dumps(self, default=lambda o: o.__dict__, indent=4)
 
 	def __init__(self, data):
-		self.user_id = data.get('userId')
+		self.user_id = data.get('id')
+		self.referral_code = data.get('referralCode')
 		self.reservation_id = data.get('reservationId')
 
 		self.first_name = data.get('firstName')

@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import requests
 from typing import List
 
+import requests
+
+from EmmyAPI.auth import EmmyAuth
+from EmmyAPI.exeptions import handle_error_response, NotLoggedInException, EmmyAPIError
 from EmmyAPI.model.reservation import Reservation
 from EmmyAPI.model.territory import Territory
-from EmmyAPI.auth import EmmyAuth
-from EmmyAPI.exeptions import handle_error_response, NotLoggedInException
 from EmmyAPI.model.user import User
-from EmmyAPI.model.car import Car, CarListItem
+from EmmyAPI.model.vehicle import Vehicle, VehicleListItem
 
 
 class EmmyAPI:
@@ -20,6 +21,7 @@ class EmmyAPI:
 		self.username = username
 		self.password = password
 		self.user_id = None
+		self.current_vehicle_id = None
 		self.auth = None
 		self.session = requests.Session()
 		self.verify = verify
@@ -60,6 +62,11 @@ class EmmyAPI:
 			self.auth = EmmyAuth(response_json.get('accessToken'))
 			self.user_id = response_json.get('id')
 
+	def logout(self) -> None:
+		endpoint = 'auth/logout'
+		payload = {}
+		self._request(endpoint=endpoint, method='post', json=payload, login=True)
+
 	# Users
 	#####################################
 
@@ -74,7 +81,7 @@ class EmmyAPI:
 	# Vehicles
 	#####################################
 
-	def list_vehicles(self, lat, lon, limit=5) -> List[CarListItem]:
+	def list_vehicles(self, lat, lon, limit=5) -> List[VehicleListItem]:
 		endpoint = 'vehicles/proximity'
 		params = {
 			'lat': lat,
@@ -82,81 +89,91 @@ class EmmyAPI:
 			'limit': limit,
 		}
 		response = self._request(endpoint, method='get', params=params)
-		return [CarListItem(item) for item in response.json()]
+		return [VehicleListItem(item) for item in response.json()]
 
-	def get_car_info(self, car_id) -> Car:
-		endpoint = 'cars/{}'.format(car_id)
+	def get_vehicles_in_area(
+			self,
+			bottom_left_lat: str or float,
+			bottom_left_lon: str or float,
+			top_right_lat: str or float,
+			top_right_lon: str or float) -> List[VehicleListItem]:
+		endpoint = 'vehicles/area'
+		params = {
+			'bottomLeftLat': bottom_left_lat,
+			'bottomLeftLon': bottom_left_lon,
+			'topRightLat': top_right_lat,
+			'topRightLon': top_right_lon,
+		}
+		response = self._request(endpoint, method='get', params=params)
+		return [VehicleListItem(item) for item in response.json()]
+
+	def get_all_vehicles(self) -> List[VehicleListItem]:
+		endpoint = 'vehicles'
 		response = self._request(endpoint, method='get')
-		return Car(response.json())
+		return [VehicleListItem(item) for item in response.json()]
 
-	def unlock_car(self, car_id: int or str):
+	def get_vehicle_info(self, vehicle_id) -> Vehicle:
+		endpoint = 'vehicles/{}'.format(vehicle_id)
+		response = self._request(endpoint, method='get')
+		return Vehicle(response.json())
+
+	# todo
+	def unlock_vehicle(self, car_id: int or str):
 		endpoint = 'users/{}/reservations/{}/car/unlock'.format(self.user_id, car_id)
 		response = self._request(endpoint, method='post')
-		return Car(response.json())
+		return Vehicle(response.json())
 
-	def lock_car(self, car_id: int or str):
+	# todo
+	def lock_vehicle(self, car_id: int or str):
 		endpoint = 'users/{}/reservations/{}/car/lock'.format(self.user_id, car_id)
 		response = self._request(endpoint, method='post')
-		return Car(response.json())
+		return Vehicle(response.json())
 
 	# Map
 	#####################################
 
-	def get_cars_in_area(self,
-	                     lat1: str or float,
-	                     lat2: str or float,
-	                     lon1: str or float,
-	                     lon2: str or float) -> List[CarListItem]:
-		endpoint = 'map/cars'
-		params = {
-			'lat1': lat1,
-			'lat2': lat2,
-			'lon1': lon1,
-			'lon2': lon2,
-		}
-		response = self._request(endpoint, method='get', params=params)
-		return [CarListItem(item) for item in response.json()]
-
-	def get_all_cars(self) -> List[CarListItem]:
-		endpoint = 'map/cars'
-		response = self._request(endpoint, method='get')
-		return [CarListItem(item) for item in response.json()]
-
+	# todo
 	def get_territories(self) -> List[Territory]:
 		endpoint = 'territories/business'
 		response = self._request(endpoint, method='get')
 		return [Territory(item) for item in response.json()]
 
-	# todo: find out what this does
+	# todo
 	def locations(self):
 		endpoint = 'locations'
 		response = self._request(endpoint, method='get')
 		return response.json()
 
-	# Reservations
+	# Rentals
 	#####################################
 
 	def start_reservation(self, car_id: int or str) -> Reservation:
-		endpoint = 'users/{}/reservations/new'.format(self.user_id)
-		data = {
-			'carId': car_id,
-		}
-		response = self._request(endpoint, method='post', json=data)
-		return Reservation(response.json())
+		endpoint = 'vehicles/{}/rentals'.format(car_id)
+		response = self._request(endpoint, method='post')
+		rental = Reservation(response.json())
+		self.current_vehicle_id = rental.vehicle_id
+		return rental
 
-	def end_reservation(self, reservation_id: int or str) -> Reservation:
-		endpoint = 'users/{}/reservations/{}/end'.format(self.user_id, reservation_id)
-		response = self._request(endpoint, method='put', )
-		return Reservation(response.json())
+	def stop_reservation(self, reservation_id: int or str) -> Reservation:
+		return self.stop_rental(reservation_id)
 
-	def get_reservation_info(self, reservation_id: int or str) -> Reservation:
-		endpoint = 'users/{}/reservations/{}'.format(self.user_id, reservation_id)
+	def stop_rental(self, reservation_id: int or str) -> Reservation:
+		endpoint = 'vehicles/{}/rentals/{}/stop'.format(self.current_vehicle_id, reservation_id)
+		payload = {}
+		response = self._request(endpoint, method='post',json=payload)
+		rental = Reservation(response.json())
+		self.current_vehicle_id = None
+		return rental
+
+	def get_rental_info(self, rental_id: int or str) -> Reservation:
+		endpoint = 'users/{}/rentals/{}'.format(self.user_id, rental_id)
 		response = self._request(endpoint, method='get')
 		return Reservation(response.json())
 
 	# General
 	#####################################
 
+	# todo
 	def log(self, lat: str or float, lon: str or float, event_name: str) -> bool:
 		endpoint = 'log'
 		data = {
@@ -170,10 +187,23 @@ class EmmyAPI:
 		response = self._request(endpoint, method='post', json=data)
 		return response.json().get('success')
 
+	# todo
 	def notifications(self) -> List:
 		endpoint = 'notifications'
 		response = self._request(endpoint, method='get')
 		return response.json()
+
+	def validate_promotion_code(self, code: str):
+		endpoint = 'promotion-codes/validate'
+		payload = {
+			'code': code,
+			'redemptionPurpose': 'SideMenu',
+		}
+		try:
+			response = self._request(endpoint, method='post', json=payload)
+			return response.json()
+		except EmmyAPIError as e:
+			return False
 
 	##########################
 	# Private Methods
@@ -205,8 +235,6 @@ class EmmyAPI:
 
 		response = self.session.send(prepped, verify=self.verify)
 		if response.status_code >= 400:
-			print(response.status_code)
-			print(response.url)
 			handle_error_response(response)
 
 		return response
@@ -219,5 +247,5 @@ class EmmyAPI:
 		if not endpoint.startswith('/'):
 			endpoint = '/' + endpoint
 		if endpoint.endswith('/'):
-			endpoint = endpoint[:len(endpoint)-1]
+			endpoint = endpoint[:len(endpoint) - 1]
 		return self.API_URL + endpoint
